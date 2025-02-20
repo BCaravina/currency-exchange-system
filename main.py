@@ -1,8 +1,9 @@
 import tkinter as tk
+from time import strftime
 from tkinter import ttk
 from tkinter.filedialog import askopenfilename
 from tkcalendar import DateEntry
-from datetime import datetime, date
+from datetime import datetime
 import pandas as pd
 import requests
 
@@ -17,7 +18,7 @@ def get_single_rate():
     currency = combobox_single_date.get()
     single_date = str(date_entry_single.get_date())
     date_api_format = single_date.replace('-', '')
-    request = requests.get(f'https://economia.awesomeapi.com.br/json/daily/{currency}/?start_date={date_api_format}&end_date={date_api_format}', timeout=10)
+    request = requests.get(f'https://economia.awesomeapi.com.br/json/daily/{currency}/1?start_date={date_api_format}&end_date={date_api_format}', timeout=10)
     exchange_rate = request.json()
     try:
         currency_value = float(exchange_rate[0]['bid'])
@@ -43,11 +44,39 @@ def get_multiple_rates():
     Returns a new Excel file with the dates and corresponding exchange rates for each coin.
     """
     df = pd.read_excel(file_path_var.get())
-    print(df)
+    currencies = df.iloc[:, 0]
 
-    start_date = date_entry_initial.get_date()
-    end_date = date_entry_final.get_date()
-    print(start_date, end_date)
+    start_date = str(date_entry_initial.get_date()).replace("-", "")
+    end_date = str(date_entry_final.get_date()).replace("-", "")
+    number_of_days = (datetime.strptime(end_date, "%Y%m%d") - datetime.strptime(start_date, "%Y%m%d")).days
+
+    export_df = pd.DataFrame()
+    for currency in currencies:
+        try:
+            link = f'https://economia.awesomeapi.com.br/json/daily/{currency}/{number_of_days}?start_date={start_date}&end_date={end_date}'
+            request = requests.get(link, timeout=10)
+            exchange_rates = request.json()
+
+            for rate in exchange_rates:
+                bid = float(rate['bid'])
+                timestamp = datetime.fromtimestamp(int(rate['timestamp']))
+                date_from_timestamp = timestamp.strftime('%m/%d/%Y')
+
+                # COLUMN A -> DATES
+                # COLUM B -> CURRENCY #1
+                # COLUM C -> CURRENCY #2
+                # COLUM D -> CURRENCY #3 ETC, ETC
+                # COLUMN A + ROW 1 = BID 1 FOR CURRENCY #1
+
+                export_df[date_from_timestamp] = date_from_timestamp
+                export_df.loc[currency] = bid
+
+                # print(f'Currency: {currency} - Bid: R$ {bid:,} - Date: {date_from_timestamp}')
+        except Exception as e:
+            print(f"ERROR: {e}")
+
+        print(export_df)
+        export_df.to_excel("Currency_Rates.xlsx", index=False)
 
 window = tk.Tk()
 window.title("Currency Exchange Rate System")
