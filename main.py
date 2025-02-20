@@ -46,7 +46,6 @@ combobox_single_date.grid(row=1, column=2, sticky="nswe", padx=10, pady=10)
 label_single_currency = tk.Label(text="Select exchange rate date:", anchor='e')
 label_single_currency.grid(row=2, column=0, columnspan=2, sticky="nswe", padx=10, pady=10)
 
-# date_entry_single = DateEntry(locale='pt-br') # this would be the option for brazilian format of date and text in portuguese
 date_entry_single = DateEntry()
 date_entry_single.grid(row=2, column=2, sticky='nswe', padx=10, pady=10)
 
