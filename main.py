@@ -1,7 +1,8 @@
 import tkinter as tk
-from time import strftime
 from tkinter import ttk
 from tkinter.filedialog import askopenfilename
+
+import numpy as np
 from tkcalendar import DateEntry
 from datetime import datetime
 import pandas as pd
@@ -43,40 +44,63 @@ def get_multiple_rates():
     After user has selected a valid Excel file with the desired currencies and date period, API call is made to retrieve the exchange rates.
     Returns a new Excel file with the dates and corresponding exchange rates for each coin.
     """
-    df = pd.read_excel(file_path_var.get())
-    currencies = df.iloc[:, 0]
+    try:
+        input_df = pd.read_excel(file_path_var.get())
+        currencies = input_df.iloc[:, 0].tolist() # converting to list for safer iteration
 
-    start_date = str(date_entry_initial.get_date()).replace("-", "")
-    end_date = str(date_entry_final.get_date()).replace("-", "")
-    number_of_days = (datetime.strptime(end_date, "%Y%m%d") - datetime.strptime(start_date, "%Y%m%d")).days
+        start_date = str(date_entry_initial.get_date()).replace("-", "")
+        end_date = str(date_entry_final.get_date()).replace("-", "")
+        number_of_days = (datetime.strptime(end_date, "%Y%m%d") - datetime.strptime(start_date, "%Y%m%d")).days + 1 # include end date
 
-    export_df = pd.DataFrame()
-    for currency in currencies:
-        try:
-            link = f'https://economia.awesomeapi.com.br/json/daily/{currency}/{number_of_days}?start_date={start_date}&end_date={end_date}'
-            request = requests.get(link, timeout=10)
-            exchange_rates = request.json()
+        data_dict = {}
+        all_dates = set() # to collect unique data values
 
-            for rate in exchange_rates:
-                bid = float(rate['bid'])
-                timestamp = datetime.fromtimestamp(int(rate['timestamp']))
-                date_from_timestamp = timestamp.strftime('%m/%d/%Y')
+        for currency in currencies:
+            try:
+                link = f'https://economia.awesomeapi.com.br/json/daily/{currency}/{number_of_days}?start_date={start_date}&end_date={end_date}'
+                request = requests.get(link, timeout=10)
+                exchange_rates = request.json()
 
-                # COLUMN A -> DATES
-                # COLUM B -> CURRENCY #1
-                # COLUM C -> CURRENCY #2
-                # COLUM D -> CURRENCY #3 ETC, ETC
-                # COLUMN A + ROW 1 = BID 1 FOR CURRENCY #1
+                # processing each rate for this currency
+                if currency not in data_dict:
+                    data_dict[currency] = {}
 
-                export_df[date_from_timestamp] = date_from_timestamp
-                export_df.loc[currency] = bid
+                for rate in exchange_rates:
+                    bid = float(rate['bid'])
+                    timestamp = datetime.fromtimestamp(int(rate['timestamp']))
+                    date_str = timestamp.strftime('%m/%d/%Y')
 
-                # print(f'Currency: {currency} - Bid: R$ {bid:,} - Date: {date_from_timestamp}')
-        except Exception as e:
-            print(f"ERROR: {e}")
+                    # store in the dictionary and add to set of dates
+                    data_dict[currency][date_str] = bid
+                    all_dates.add(date_str)
 
-        print(export_df)
-        export_df.to_excel("Currency_Rates.xlsx", index=False)
+            except Exception as e:
+                print(f"Error fetching data for {currency}: {e}")
+                continue  # Continue with other currencies even if one fails
+
+        all_dates = sorted(list(all_dates)) # setting dates in chronological order
+
+        # creating empty dataframe and having the dates as index
+        export_df = pd.DataFrame(index=all_dates)
+        export_df.index.name = 'Date'
+
+        # adding the bids for each currency
+        for currency in currencies:
+            # Check if we have data for this currency
+            if currency in data_dict:
+                export_df[currency] = np.nan  # Start with all NaN values
+
+                for date in export_df.index:
+                    if date in data_dict[currency]:
+                        export_df.loc[date, currency] = data_dict[currency][date]
+
+        export_df.to_excel("exchange_rates.xlsx")
+        label_update_success['text'] = "File created successfully."
+
+    except Exception as e:
+        print(f"ERROR: {e}")
+        label_update_success['text'] = "Error creating document. Please retry."
+
 
 window = tk.Tk()
 window.title("Currency Exchange Rate System")
@@ -126,7 +150,7 @@ date_entry_final =  DateEntry()
 date_entry_final.grid(row=8, column=1, sticky='nswe', padx=10, pady=10)
 
 label_update_success = tk.Label(text="")
-label_update_success.grid(row=9, column=0, columnspan=3, sticky='nswe', padx=10, pady=10)
+label_update_success.grid(row=8, column=2, sticky='nswe', padx=10, pady=10)
 
 button_update_currencies = tk.Button(text="Get Rates", command=get_multiple_rates)
 button_update_currencies.grid(row=7, column=2, sticky='nswe', padx=10, pady=10)
